@@ -50,6 +50,12 @@ button {
   font-weight: bold;
   cursor: pointer;
   margin-bottom: 10px;
+  transition: background-color 0.2s;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 button:active {
@@ -59,6 +65,37 @@ button:active {
 .mensaje {
   text-align: center;
   margin-top: 10px;
+  margin-bottom: 10px;
   font-size: 0.9rem;
   color: #aaa;
+}
+
+#visualizador {
+  width: 100%;
+  height: 80px;
+  border-radius: 8px;
+  background-color: #16213e;
+  margin-bottom: 10px;
+}
+
+.resultado-box {
+  background-color: #16213e;
+  border-radius: 8px;
+  padding: 16px;
+  margin-top: 16px;
+  border: 1px solid #444;
+}
+
+.resultado-label {
+  font-size: 0.8rem;
+  color: #e94560;
+  margin-bottom: 8px;
+  font-weight: bold;
+  text-transform: uppercase;
+}
+
+.resultado-texto {
+  font-size: 1rem;
+  line-height: 1.5;
+  color: #eaeaea;
 }

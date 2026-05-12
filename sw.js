@@ -1,4 +1,4 @@
-const CACHE_NAME = 'notas-voz-v3';
+const CACHE_NAME = 'notas-voz-v6';
 const ASSETS = [
   '/voice-notes-app/',
   '/voice-notes-app/index.html',
@@ -6,9 +6,8 @@ const ASSETS = [
   '/voice-notes-app/css/styles.css',
   '/voice-notes-app/js/config.js',
   '/voice-notes-app/js/audio.js',
-  '/voice-notes-app/js/api-groq.js',
+  '/voice-notes-app/js/api-ia.js',
   '/voice-notes-app/js/api-sheets.js',
-  '/voice-notes-app/js/api-gemini.js',
   '/voice-notes-app/js/app.js'
 ];
 

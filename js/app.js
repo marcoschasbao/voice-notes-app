@@ -1,5 +1,7 @@
 let grabando = false;
 let clientesCache = [];
+let transcripcionActual = '';
+let analisisActual = null;
 
 // ==================
 // CONFIGURACIÓN
@@ -9,7 +11,6 @@ function mostrarConfig() {
     <h1>Notas de Voz</h1>
     <p class="mensaje">Introduce tus claves para empezar</p><br>
     <input type="password" id="groq" placeholder="Groq API Key" />
-    <input type="password" id="gemini" placeholder="Gemini API Key" />
     <input type="password" id="sheets" placeholder="Google Sheets API Key" />
     <input type="text" id="spreadsheet" placeholder="Spreadsheet ID" />
     <button onclick="guardarConfig()">Guardar y continuar</button>
@@ -18,16 +19,15 @@ function mostrarConfig() {
 
 function guardarConfig() {
   const groq = document.getElementById('groq').value.trim();
-  const gemini = document.getElementById('gemini').value.trim();
   const sheets = document.getElementById('sheets').value.trim();
   const spreadsheet = document.getElementById('spreadsheet').value.trim();
 
-  if (!groq || !gemini || !sheets || !spreadsheet) {
+  if (!groq || !sheets || !spreadsheet) {
     alert('Por favor rellena todos los campos');
     return;
   }
 
-  Config.save(groq, gemini, sheets, spreadsheet);
+  Config.save(groq, sheets, spreadsheet);
   iniciarApp();
 }
 
@@ -107,15 +107,8 @@ async function toggleGrabacion() {
     }
 
     try {
-      const transcripcion = await Groq.transcribir(blob);
-      estado.textContent = '🧠 Analizando con IA...';
-
-      const analisis = await Gemini.analizar(transcripcion, clientesCache);
-      const clienteMatch = Sheets.buscarClienteFuzzy(analisis.cliente_sugerido, clientesCache);
-
-      mostrarResultado(transcripcion, analisis, clienteMatch);
-      estado.textContent = '✅ Análisis completado';
-
+      transcripcionActual = await IA.transcribir(blob);
+      mostrarTranscripcion();
     } catch (e) {
       estado.textContent = `❌ Error: ${e.message}`;
     }
@@ -126,54 +119,138 @@ async function toggleGrabacion() {
 }
 
 // ==================
-// RESULTADO
+// TRANSCRIPCIÓN
 // ==================
-function mostrarResultado(transcripcion, analisis, clienteMatch) {
+function mostrarTranscripcion() {
+  document.getElementById('resultado').innerHTML = `
+    <div class="resultado-box">
+      <p class="resultado-label">Transcripción</p>
+      <p class="resultado-texto">${transcripcionActual}</p>
+    </div>
+    <button onclick="analizarTranscripcion()">🧠 Analizar con IA</button>
+    <button onclick="mostrarFormularioManual()">✏️ Rellenar manualmente</button>
+  `;
+  document.getElementById('estado').textContent = '✅ Transcripción completada';
+}
+
+// ==================
+// ANÁLISIS IA
+// ==================
+async function analizarTranscripcion() {
+  const estado = document.getElementById('estado');
+  estado.textContent = '🧠 Analizando...';
+
+  const btns = document.getElementById('resultado').querySelectorAll('button');
+  btns.forEach(b => b.disabled = true);
+
+  try {
+    analisisActual = await IA.analizar(transcripcionActual, clientesCache);
+    const clienteMatch = Sheets.buscarClienteFuzzy(analisisActual.cliente_sugerido, clientesCache);
+    mostrarFormularioConfirmacion(analisisActual, clienteMatch);
+    estado.textContent = '✅ Análisis completado';
+  } catch (e) {
+    estado.textContent = `❌ Error IA: ${e.message}`;
+    btns.forEach(b => b.disabled = false);
+  }
+}
+
+// ==================
+// FORMULARIO MANUAL
+// ==================
+function mostrarFormularioManual() {
+  mostrarFormularioConfirmacion({
+    resumen: '',
+    tareas: [],
+    urgencia: 3,
+    cliente_sugerido: ''
+  }, null);
+}
+
+// ==================
+// FORMULARIO CONFIRMACIÓN
+// ==================
+function mostrarFormularioConfirmacion(analisis, clienteMatch) {
   const opcionesClientes = clientesCache.map(c =>
-    `<option value="${c.id}" ${clienteMatch && clienteMatch.id === c.id ? 'selected' : ''}>
+    `<option value="${c.id}" data-nombre="${c.nombre}" ${clienteMatch && clienteMatch.id === c.id ? 'selected' : ''}>
       ${c.nombre} — ${c.empresa}
     </option>`
   ).join('');
-
-  const tareasHtml = analisis.tareas.length > 0
-    ? analisis.tareas.map(t => `<li>${t}</li>`).join('')
-    : '<li>Sin tareas detectadas</li>';
 
   const urgenciaColores = ['', '#27ae60', '#2ecc71', '#f39c12', '#e67e22', '#e74c3c'];
 
   document.getElementById('resultado').innerHTML = `
     <div class="resultado-box">
       <p class="resultado-label">Transcripción</p>
-      <p class="resultado-texto">${transcripcion}</p>
+      <p class="resultado-texto">${transcripcionActual}</p>
     </div>
 
     <div class="resultado-box">
       <p class="resultado-label">Resumen</p>
-      <p class="resultado-texto">${analisis.resumen}</p>
+      <textarea id="campoResumen" rows="3">${analisis.resumen}</textarea>
     </div>
 
     <div class="resultado-box">
-      <p class="resultado-label">Tareas detectadas</p>
-      <ul class="resultado-texto">${tareasHtml}</ul>
+      <p class="resultado-label">Tareas (separadas por |)</p>
+      <textarea id="campoTareas" rows="3">${Array.isArray(analisis.tareas) ? analisis.tareas.join(' | ') : ''}</textarea>
     </div>
 
     <div class="resultado-box">
-      <p class="resultado-label">Urgencia</p>
-      <p class="resultado-texto" style="color:${urgenciaColores[analisis.urgencia]}; font-size:1.4rem; font-weight:bold;">
-        ${'★'.repeat(analisis.urgencia)}${'☆'.repeat(5 - analisis.urgencia)} (${analisis.urgencia}/5)
-      </p>
+      <p class="resultado-label">Urgencia: <span id="urgenciaValor" style="color:${urgenciaColores[analisis.urgencia]}; font-weight:bold;">${analisis.urgencia}/5</span></p>
+      <input type="range" id="campoUrgencia" min="1" max="5" value="${analisis.urgencia}"
+        oninput="actualizarUrgencia(this.value)" />
     </div>
 
     <div class="resultado-box">
-      <p class="resultado-label">Cliente asignado</p>
-      <select id="clienteSeleccionado">
+      <p class="resultado-label">Cliente</p>
+      <select id="campoCliente">
         <option value="">-- Sin cliente --</option>
         ${opcionesClientes}
       </select>
     </div>
 
+    <button onclick="guardarNota()">💾 Guardar en Sheets</button>
     <button onclick="mostrarGrabador()">🎙️ Nueva nota</button>
   `;
+}
+
+function actualizarUrgencia(valor) {
+  const colores = ['', '#27ae60', '#2ecc71', '#f39c12', '#e67e22', '#e74c3c'];
+  const span = document.getElementById('urgenciaValor');
+  span.textContent = `${valor}/5`;
+  span.style.color = colores[parseInt(valor)];
+}
+
+// ==================
+// GUARDAR EN SHEETS
+// ==================
+async function guardarNota() {
+  const btn = document.querySelector('#resultado button');
+  btn.disabled = true;
+  btn.textContent = '💾 Guardando...';
+
+  const selectCliente = document.getElementById('campoCliente');
+  const clienteId = selectCliente.value;
+  const clienteNombre = selectCliente.options[selectCliente.selectedIndex]?.dataset?.nombre || '';
+
+  const nota = {
+    transcripcion: transcripcionActual,
+    resumen: document.getElementById('campoResumen').value.trim(),
+    tareas: document.getElementById('campoTareas').value.trim(),
+    urgencia: document.getElementById('campoUrgencia').value,
+    clienteId: clienteId,
+    clienteConfirmado: clienteNombre
+  };
+
+  try {
+    await Sheets.guardarNota(nota);
+    document.getElementById('estado').textContent = '✅ Nota guardada correctamente';
+    btn.textContent = '✅ Guardado';
+    setTimeout(mostrarGrabador, 1500);
+  } catch (e) {
+    document.getElementById('estado').textContent = `❌ Error guardando: ${e.message}`;
+    btn.disabled = false;
+    btn.textContent = '💾 Guardar en Sheets';
+  }
 }
 
 // ==================

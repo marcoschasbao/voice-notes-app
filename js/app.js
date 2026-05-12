@@ -1,4 +1,5 @@
 let grabando = false;
+let grabadorActual = null;
 let clientesCache = [];
 let notasCache = [];
 let transcripcionActual = '';
@@ -48,7 +49,6 @@ function mostrarConfig() {
     <button onclick="guardarConfig()">Guardar y continuar</button>
   `;
 
-  // Si ya hay config guardada, mostrar campos rellenos
   if (Config.groqKey) document.getElementById('groq').value = Config.groqKey;
   if (Config.sheetsKey) document.getElementById('sheets').value = Config.sheetsKey;
   if (Config.spreadsheetId) document.getElementById('spreadsheet').value = Config.spreadsheetId;
@@ -84,7 +84,7 @@ async function iniciarApp() {
     } catch {
       notasCache = [];
     }
-    document.getElementById('estado').textContent = 
+    document.getElementById('estado').textContent =
       `✅ ${clientesCache.length} clientes cargados`;
     setTimeout(() => {
       document.getElementById('estado').textContent = 'Listo para grabar';
@@ -100,48 +100,59 @@ async function iniciarApp() {
 async function toggleGrabacion() {
   const btn = document.getElementById('btnGrabar');
   const estado = document.getElementById('estado');
+  const canvas = document.getElementById('visualizador');
 
   if (!grabando) {
-    const ok = await Audio.iniciarGrabacion((segundos) => {
-      const m = String(Math.floor(segundos / 60)).padStart(2, '0');
-      const s = String(segundos % 60).padStart(2, '0');
-      document.getElementById('timer').textContent = `${m}:${s}`;
-    });
-
-    if (!ok) return;
+    try {
+      grabadorActual = await Audio.grabar((segundos) => {
+        const m = String(Math.floor(segundos / 60)).padStart(2, '0');
+        const s = String(segundos % 60).padStart(2, '0');
+        document.getElementById('timer').textContent = `${m}:${s}`;
+      });
+    } catch (e) {
+      estado.textContent = '❌ Sin acceso al micrófono. Ve a Ajustes > Safari > Micrófono.';
+      return;
+    }
 
     grabando = true;
     btn.textContent = '⏹️';
     btn.classList.add('recording');
     estado.textContent = 'Grabando...';
-
-    const canvas = document.getElementById('visualizador');
-    Audio.dibujarVisualizador(canvas);
+    Audio.dibujarVisualizador(canvas, grabadorActual.analyser);
 
   } else {
     grabando = false;
     btn.textContent = '🎙️';
     btn.classList.remove('recording');
     btn.disabled = true;
-    estado.textContent = 'Transcribiendo...';
+    estado.textContent = 'Procesando...';
 
-    const blob = await Audio.detenerGrabacion();
+    // Detener grabación y liberar micrófono inmediatamente
+    grabadorActual.detener();
 
-    if (!blob) {
-      estado.textContent = 'Error al obtener el audio.';
-      btn.disabled = false;
-      return;
-    }
+    // Limpiar visualizador suavemente
+    Audio.limpiarVisualizador(canvas);
 
     try {
+      const blob = await grabadorActual.result;
+
+      if (!blob || blob.size === 0) {
+        estado.textContent = 'Error al obtener el audio.';
+        btn.disabled = false;
+        return;
+      }
+
+      estado.textContent = 'Transcribiendo...';
       transcripcionActual = await IA.transcribir(blob);
       mostrarTranscripcion();
+
     } catch (e) {
       estado.textContent = `❌ Error: ${e.message}`;
     }
 
     btn.disabled = false;
     document.getElementById('timer').textContent = '00:00';
+    grabadorActual = null;
   }
 }
 
@@ -288,7 +299,6 @@ function renderNotas() {
   const filtroCliente = document.getElementById('filtroCliente')?.value || '';
   const filtroUrgencia = document.getElementById('filtroUrgencia')?.value || '';
 
-  // Actualizar opciones de clientes en filtro
   const selectCliente = document.getElementById('filtroCliente');
   if (selectCliente && selectCliente.options.length <= 1) {
     const clientes = [...new Set(notasCache.map(n => n.clienteConfirmado).filter(Boolean))];

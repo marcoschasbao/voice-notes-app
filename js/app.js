@@ -1,3 +1,9 @@
+let grabando = false;
+let clientesCache = [];
+
+// ==================
+// CONFIGURACIÓN
+// ==================
 function mostrarConfig() {
   document.getElementById('app').innerHTML = `
     <h1>Notas de Voz</h1>
@@ -22,9 +28,35 @@ function guardarConfig() {
   }
 
   Config.save(groq, gemini, sheets, spreadsheet);
-  mostrarGrabador();
+  iniciarApp();
 }
 
+// ==================
+// INICIO
+// ==================
+async function iniciarApp() {
+  document.getElementById('app').innerHTML = `
+    <h1>Notas de Voz</h1>
+    <p class="mensaje" id="estado-inicio">Cargando clientes...</p>
+  `;
+
+  try {
+    clientesCache = await Sheets.obtenerClientes();
+    document.getElementById('estado-inicio').textContent =
+      `✅ ${clientesCache.length} clientes cargados`;
+    setTimeout(mostrarGrabador, 800);
+  } catch (e) {
+    document.getElementById('estado-inicio').innerHTML = `
+      ❌ Error cargando clientes: ${e.message}<br><br>
+      <button onclick="iniciarApp()">Reintentar</button>
+      <button onclick="Config.clear(); mostrarConfig()">⚙️ Reconfigurar</button>
+    `;
+  }
+}
+
+// ==================
+// GRABADOR
+// ==================
 function mostrarGrabador() {
   document.getElementById('app').innerHTML = `
     <h1>Notas de Voz</h1>
@@ -38,14 +70,11 @@ function mostrarGrabador() {
   `;
 }
 
-let grabando = false;
-
 async function toggleGrabacion() {
   const btn = document.getElementById('btnGrabar');
   const estado = document.getElementById('estado');
 
   if (!grabando) {
-    // Iniciar grabación
     const ok = await Audio.iniciarGrabacion((segundos) => {
       const m = String(Math.floor(segundos / 60)).padStart(2, '0');
       const s = String(segundos % 60).padStart(2, '0');
@@ -63,7 +92,6 @@ async function toggleGrabacion() {
     Audio.dibujarVisualizador(canvas);
 
   } else {
-    // Detener grabación
     grabando = false;
     btn.textContent = '🎙️ Grabar';
     btn.style.backgroundColor = '';
@@ -79,14 +107,15 @@ async function toggleGrabacion() {
     }
 
     try {
-      const texto = await Groq.transcribir(blob);
-      document.getElementById('resultado').innerHTML = `
-        <div class="resultado-box">
-          <p class="resultado-label">Transcripción:</p>
-          <p class="resultado-texto">${texto}</p>
-        </div>
-      `;
-      estado.textContent = '✅ Transcripción completada';
+      const transcripcion = await Groq.transcribir(blob);
+      estado.textContent = '🧠 Analizando con IA...';
+
+      const analisis = await Gemini.analizar(transcripcion, clientesCache);
+      const clienteMatch = Sheets.buscarClienteFuzzy(analisis.cliente_sugerido, clientesCache);
+
+      mostrarResultado(transcripcion, analisis, clienteMatch);
+      estado.textContent = '✅ Análisis completado';
+
     } catch (e) {
       estado.textContent = `❌ Error: ${e.message}`;
     }
@@ -96,9 +125,62 @@ async function toggleGrabacion() {
   }
 }
 
-// Punto de entrada
+// ==================
+// RESULTADO
+// ==================
+function mostrarResultado(transcripcion, analisis, clienteMatch) {
+  const opcionesClientes = clientesCache.map(c =>
+    `<option value="${c.id}" ${clienteMatch && clienteMatch.id === c.id ? 'selected' : ''}>
+      ${c.nombre} — ${c.empresa}
+    </option>`
+  ).join('');
+
+  const tareasHtml = analisis.tareas.length > 0
+    ? analisis.tareas.map(t => `<li>${t}</li>`).join('')
+    : '<li>Sin tareas detectadas</li>';
+
+  const urgenciaColores = ['', '#27ae60', '#2ecc71', '#f39c12', '#e67e22', '#e74c3c'];
+
+  document.getElementById('resultado').innerHTML = `
+    <div class="resultado-box">
+      <p class="resultado-label">Transcripción</p>
+      <p class="resultado-texto">${transcripcion}</p>
+    </div>
+
+    <div class="resultado-box">
+      <p class="resultado-label">Resumen</p>
+      <p class="resultado-texto">${analisis.resumen}</p>
+    </div>
+
+    <div class="resultado-box">
+      <p class="resultado-label">Tareas detectadas</p>
+      <ul class="resultado-texto">${tareasHtml}</ul>
+    </div>
+
+    <div class="resultado-box">
+      <p class="resultado-label">Urgencia</p>
+      <p class="resultado-texto" style="color:${urgenciaColores[analisis.urgencia]}; font-size:1.4rem; font-weight:bold;">
+        ${'★'.repeat(analisis.urgencia)}${'☆'.repeat(5 - analisis.urgencia)} (${analisis.urgencia}/5)
+      </p>
+    </div>
+
+    <div class="resultado-box">
+      <p class="resultado-label">Cliente asignado</p>
+      <select id="clienteSeleccionado">
+        <option value="">-- Sin cliente --</option>
+        ${opcionesClientes}
+      </select>
+    </div>
+
+    <button onclick="mostrarGrabador()">🎙️ Nueva nota</button>
+  `;
+}
+
+// ==================
+// PUNTO DE ENTRADA
+// ==================
 if (Config.isComplete()) {
-  mostrarGrabador();
+  iniciarApp();
 } else {
   mostrarConfig();
 }

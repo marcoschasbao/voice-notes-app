@@ -12,13 +12,13 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding: 20px;
+  padding: 0 0 80px 0;
 }
 
 #app {
   width: 100%;
   max-width: 480px;
+  padding: 20px;
 }
 
 h1 {
@@ -37,6 +37,16 @@ input, select, textarea {
   background-color: #16213e;
   color: #eaeaea;
   font-size: 1rem;
+}
+
+textarea {
+  resize: vertical;
+}
+
+input[type="range"] {
+  padding: 4px 0;
+  border: none;
+  background: none;
 }
 
 button {
@@ -82,7 +92,7 @@ button:active {
   background-color: #16213e;
   border-radius: 8px;
   padding: 16px;
-  margin-top: 16px;
+  margin-bottom: 12px;
   border: 1px solid #444;
 }
 
@@ -100,6 +110,90 @@ button:active {
   color: #eaeaea;
 }
 
+/* NAVBAR */
+.navbar {
+  display: flex;
+  justify-content: space-around;
+  background-color: #16213e;
+  padding: 10px;
+  border-radius: 12px;
+  margin-bottom: 20px;
+  border: 1px solid #444;
+}
+
+.navbar button {
+  width: auto;
+  padding: 8px 16px;
+  background-color: transparent;
+  color: #aaa;
+  font-size: 0.9rem;
+  margin-bottom: 0;
+  border-radius: 8px;
+}
+
+.navbar button.nav-activo {
+  background-color: #e94560;
+  color: white;
+}
+
+/* FILTROS */
+.filtros {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.filtros select {
+  margin-bottom: 0;
+  font-size: 0.85rem;
+}
+
+/* NOTAS DASHBOARD */
+.nota-card {
+  background-color: #16213e;
+  border-radius: 8px;
+  padding: 14px;
+  margin-bottom: 12px;
+  border: 1px solid #444;
+}
+
+.nota-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.nota-cliente {
+  font-weight: bold;
+  color: #e94560;
+  font-size: 0.95rem;
+}
+
+.nota-urgencia {
+  font-size: 0.85rem;
+}
+
+.nota-fecha {
+  font-size: 0.75rem;
+  color: #666;
+  margin-bottom: 8px;
+}
+
+.nota-resumen {
+  font-size: 0.9rem;
+  color: #eaeaea;
+  line-height: 1.4;
+  margin-bottom: 6px;
+}
+
+.nota-tareas {
+  font-size: 0.85rem;
+  color: #aaa;
+  line-height: 1.4;
+}
+
+/* VERSION */
 #version {
   position: fixed;
   bottom: 8px;

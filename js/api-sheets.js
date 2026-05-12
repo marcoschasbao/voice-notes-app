@@ -26,37 +26,40 @@ const Sheets = {
     })).filter(c => c.nombre.trim() !== '');
   },
 
-  async guardarNota(nota) {
-    const id = Config.spreadsheetId;
-    const key = Config.sheetsKey;
-    const url = `${this.BASE_URL}/${id}/values/Notas!A:H:append?valueInputOption=USER_ENTERED&key=${key}`;
+  async obtenerNotas() {
+    const url = `${Config.gasUrl}?tipo=notas`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`Error obteniendo notas: ${response.status}`);
+    const data = await response.json();
+    if (!data.ok) throw new Error(data.error || 'Error desconocido');
+    return data.data || [];
+  },
 
+  async guardarNota(nota) {
     const ahora = new Date();
     const fecha = ahora.toLocaleDateString('es-ES');
     const hora = ahora.toLocaleTimeString('es-ES');
 
-    const fila = [
+    const payload = {
       fecha,
       hora,
-      nota.transcripcion || '',
-      nota.resumen || '',
-      Array.isArray(nota.tareas) ? nota.tareas.join(' | ') : (nota.tareas || ''),
-      nota.urgencia || 3,
-      nota.clienteId || '',
-      nota.clienteConfirmado || ''
-    ];
+      transcripcion: nota.transcripcion || '',
+      resumen: nota.resumen || '',
+      tareas: Array.isArray(nota.tareas) ? nota.tareas.join(' | ') : (nota.tareas || ''),
+      urgencia: nota.urgencia || 3,
+      clienteId: nota.clienteId || '',
+      clienteConfirmado: nota.clienteConfirmado || ''
+    };
 
-    const response = await fetch(url, {
+    const response = await fetch(Config.gasUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ values: [fila] })
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify(payload)
     });
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(`Error guardando nota: ${error.error?.message || response.status}`);
-    }
-
+    if (!response.ok) throw new Error(`Error guardando nota: ${response.status}`);
+    const data = await response.json();
+    if (!data.ok) throw new Error(data.error || 'Error desconocido');
     return true;
   },
 

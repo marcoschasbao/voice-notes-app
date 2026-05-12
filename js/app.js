@@ -1,7 +1,7 @@
 let grabando = false;
 let clientesCache = [];
+let notasCache = [];
 let transcripcionActual = '';
-let analisisActual = null;
 
 // ==================
 // CONFIGURACIÓN
@@ -13,6 +13,7 @@ function mostrarConfig() {
     <input type="password" id="groq" placeholder="Groq API Key" />
     <input type="password" id="sheets" placeholder="Google Sheets API Key" />
     <input type="text" id="spreadsheet" placeholder="Spreadsheet ID" />
+    <input type="text" id="gasUrl" placeholder="Google Apps Script URL" />
     <button onclick="guardarConfig()">Guardar y continuar</button>
   `;
 }
@@ -21,13 +22,14 @@ function guardarConfig() {
   const groq = document.getElementById('groq').value.trim();
   const sheets = document.getElementById('sheets').value.trim();
   const spreadsheet = document.getElementById('spreadsheet').value.trim();
+  const gasUrl = document.getElementById('gasUrl').value.trim();
 
-  if (!groq || !sheets || !spreadsheet) {
+  if (!groq || !sheets || !spreadsheet || !gasUrl) {
     alert('Por favor rellena todos los campos');
     return;
   }
 
-  Config.save(groq, sheets, spreadsheet);
+  Config.save(groq, sheets, spreadsheet, gasUrl);
   iniciarApp();
 }
 
@@ -37,17 +39,22 @@ function guardarConfig() {
 async function iniciarApp() {
   document.getElementById('app').innerHTML = `
     <h1>Notas de Voz</h1>
-    <p class="mensaje" id="estado-inicio">Cargando clientes...</p>
+    <p class="mensaje" id="estado-inicio">Cargando datos...</p>
   `;
 
   try {
     clientesCache = await Sheets.obtenerClientes();
+    try {
+      notasCache = await Sheets.obtenerNotas();
+    } catch {
+      notasCache = [];
+    }
     document.getElementById('estado-inicio').textContent =
-      `✅ ${clientesCache.length} clientes cargados`;
+      `✅ ${clientesCache.length} clientes y ${notasCache.length} notas cargadas`;
     setTimeout(mostrarGrabador, 800);
   } catch (e) {
     document.getElementById('estado-inicio').innerHTML = `
-      ❌ Error cargando clientes: ${e.message}<br><br>
+      ❌ Error cargando datos: ${e.message}<br><br>
       <button onclick="iniciarApp()">Reintentar</button>
       <button onclick="Config.clear(); mostrarConfig()">⚙️ Reconfigurar</button>
     `;
@@ -55,18 +62,30 @@ async function iniciarApp() {
 }
 
 // ==================
+// NAVEGACIÓN
+// ==================
+function navBar(activa) {
+  return `
+    <div class="navbar">
+      <button class="${activa === 'grabar' ? 'nav-activo' : ''}" onclick="mostrarGrabador()">🎙️ Grabar</button>
+      <button class="${activa === 'dashboard' ? 'nav-activo' : ''}" onclick="mostrarDashboard()">📋 Notas</button>
+      <button class="${activa === 'config' ? 'nav-activo' : ''}" onclick="Config.clear(); mostrarConfig()">⚙️</button>
+    </div>
+  `;
+}
+
+// ==================
 // GRABADOR
 // ==================
 function mostrarGrabador() {
   document.getElementById('app').innerHTML = `
+    ${navBar('grabar')}
     <h1>Notas de Voz</h1>
     <canvas id="visualizador" width="440" height="80"></canvas>
     <p class="mensaje" id="timer">00:00</p>
     <button id="btnGrabar" onclick="toggleGrabacion()">🎙️ Grabar</button>
     <p class="mensaje" id="estado"></p>
     <div id="resultado"></div>
-    <br>
-    <button onclick="Config.clear(); mostrarConfig()">⚙️ Configuración</button>
   `;
 }
 
@@ -144,9 +163,9 @@ async function analizarTranscripcion() {
   btns.forEach(b => b.disabled = true);
 
   try {
-    analisisActual = await IA.analizar(transcripcionActual, clientesCache);
-    const clienteMatch = Sheets.buscarClienteFuzzy(analisisActual.cliente_sugerido, clientesCache);
-    mostrarFormularioConfirmacion(analisisActual, clienteMatch);
+    const analisis = await IA.analizar(transcripcionActual, clientesCache);
+    const clienteMatch = Sheets.buscarClienteFuzzy(analisis.cliente_sugerido, clientesCache);
+    mostrarFormularioConfirmacion(analisis, clienteMatch);
     estado.textContent = '✅ Análisis completado';
   } catch (e) {
     estado.textContent = `❌ Error IA: ${e.message}`;
@@ -183,23 +202,19 @@ function mostrarFormularioConfirmacion(analisis, clienteMatch) {
       <p class="resultado-label">Transcripción</p>
       <p class="resultado-texto">${transcripcionActual}</p>
     </div>
-
     <div class="resultado-box">
       <p class="resultado-label">Resumen</p>
       <textarea id="campoResumen" rows="3">${analisis.resumen}</textarea>
     </div>
-
     <div class="resultado-box">
       <p class="resultado-label">Tareas (separadas por |)</p>
       <textarea id="campoTareas" rows="3">${Array.isArray(analisis.tareas) ? analisis.tareas.join(' | ') : ''}</textarea>
     </div>
-
     <div class="resultado-box">
       <p class="resultado-label">Urgencia: <span id="urgenciaValor" style="color:${urgenciaColores[analisis.urgencia]}; font-weight:bold;">${analisis.urgencia}/5</span></p>
       <input type="range" id="campoUrgencia" min="1" max="5" value="${analisis.urgencia}"
         oninput="actualizarUrgencia(this.value)" />
     </div>
-
     <div class="resultado-box">
       <p class="resultado-label">Cliente</p>
       <select id="campoCliente">
@@ -207,8 +222,7 @@ function mostrarFormularioConfirmacion(analisis, clienteMatch) {
         ${opcionesClientes}
       </select>
     </div>
-
-    <button onclick="guardarNota()">💾 Guardar en Sheets</button>
+    <button id="btnGuardar" onclick="guardarNota()">💾 Guardar en Sheets</button>
     <button onclick="mostrarGrabador()">🎙️ Nueva nota</button>
   `;
 }
@@ -224,7 +238,7 @@ function actualizarUrgencia(valor) {
 // GUARDAR EN SHEETS
 // ==================
 async function guardarNota() {
-  const btn = document.querySelector('#resultado button');
+  const btn = document.getElementById('btnGuardar');
   btn.disabled = true;
   btn.textContent = '💾 Guardando...';
 
@@ -237,12 +251,13 @@ async function guardarNota() {
     resumen: document.getElementById('campoResumen').value.trim(),
     tareas: document.getElementById('campoTareas').value.trim(),
     urgencia: document.getElementById('campoUrgencia').value,
-    clienteId: clienteId,
+    clienteId,
     clienteConfirmado: clienteNombre
   };
 
   try {
     await Sheets.guardarNota(nota);
+    notasCache.push(nota);
     document.getElementById('estado').textContent = '✅ Nota guardada correctamente';
     btn.textContent = '✅ Guardado';
     setTimeout(mostrarGrabador, 1500);
@@ -251,6 +266,66 @@ async function guardarNota() {
     btn.disabled = false;
     btn.textContent = '💾 Guardar en Sheets';
   }
+}
+
+// ==================
+// DASHBOARD
+// ==================
+function mostrarDashboard() {
+  const clientes = [...new Set(notasCache.map(n => n.clienteConfirmado).filter(Boolean))];
+
+  document.getElementById('app').innerHTML = `
+    ${navBar('dashboard')}
+    <h1>Mis Notas</h1>
+    <div class="filtros">
+      <select id="filtroCliente" onchange="renderNotas()">
+        <option value="">Todos los clientes</option>
+        ${clientes.map(c => `<option value="${c}">${c}</option>`).join('')}
+      </select>
+      <select id="filtroUrgencia" onchange="renderNotas()">
+        <option value="">Toda urgencia</option>
+        <option value="5">⭐⭐⭐⭐⭐ Máxima</option>
+        <option value="4">⭐⭐⭐⭐ Alta</option>
+        <option value="3">⭐⭐⭐ Media</option>
+        <option value="2">⭐⭐ Baja</option>
+        <option value="1">⭐ Mínima</option>
+      </select>
+    </div>
+    <div id="listanotas"></div>
+  `;
+
+  renderNotas();
+}
+
+function renderNotas() {
+  const filtroCliente = document.getElementById('filtroCliente').value;
+  const filtroUrgencia = document.getElementById('filtroUrgencia').value;
+  const urgenciaColores = ['', '#27ae60', '#2ecc71', '#f39c12', '#e67e22', '#e74c3c'];
+
+  let notas = [...notasCache].reverse();
+
+  if (filtroCliente) notas = notas.filter(n => n.clienteConfirmado === filtroCliente);
+  if (filtroUrgencia) notas = notas.filter(n => String(n.urgencia) === filtroUrgencia);
+
+  if (notas.length === 0) {
+    document.getElementById('listanotas').innerHTML =
+      `<p class="mensaje">No hay notas con estos filtros.</p>`;
+    return;
+  }
+
+  document.getElementById('listanotas').innerHTML = notas.map(n => `
+    <div class="nota-card">
+      <div class="nota-header">
+        <span class="nota-cliente">${n.clienteConfirmado || 'Sin cliente'}</span>
+        <span class="nota-urgencia" style="color:${urgenciaColores[n.urgencia] || '#aaa'}">
+          ${'★'.repeat(n.urgencia)}${'☆'.repeat(5 - n.urgencia)}
+        </span>
+      </div>
+      <p class="nota-fecha">${n.fecha} ${n.hora}</p>
+      <p class="nota-resumen">${n.resumen}</p>
+      ${n.tareas ? `<p class="nota-tareas">📌 ${n.tareas}</p>` : ''}
+    </div>
+  `).join('');
 }
 
 // ==================

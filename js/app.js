@@ -4,18 +4,55 @@ let notasCache = [];
 let transcripcionActual = '';
 
 // ==================
+// TAB BAR
+// ==================
+document.addEventListener('DOMContentLoaded', () => {
+  const tabs = document.querySelectorAll('.tab-btn');
+  const views = document.querySelectorAll('.view');
+
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      const targetView = tab.getAttribute('data-view');
+      tabs.forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      views.forEach(v => v.classList.remove('active'));
+      document.getElementById(`view-${targetView}`).classList.add('active');
+
+      if (targetView === 'dashboard') renderNotas();
+    });
+  });
+
+  // Arrancar app
+  if (Config.isComplete()) {
+    iniciarApp();
+  } else {
+    mostrarConfig();
+  }
+});
+
+// ==================
 // CONFIGURACIÓN
 // ==================
 function mostrarConfig() {
-  document.getElementById('app').innerHTML = `
-    <h1>Notas de Voz</h1>
-    <p class="mensaje">Introduce tus claves para empezar</p><br>
-    <input type="password" id="groq" placeholder="Groq API Key" />
-    <input type="password" id="sheets" placeholder="Google Sheets API Key" />
-    <input type="text" id="spreadsheet" placeholder="Spreadsheet ID" />
-    <input type="text" id="gasUrl" placeholder="Google Apps Script URL" />
+  document.getElementById('config-content').innerHTML = `
+    <div class="config-section">
+      <label>Groq API Key</label>
+      <input type="password" id="groq" placeholder="gsk_..." />
+      <label>Google Sheets API Key</label>
+      <input type="password" id="sheets" placeholder="AIzaSy..." />
+      <label>Spreadsheet ID</label>
+      <input type="text" id="spreadsheet" placeholder="ID de tu hoja" />
+      <label>Google Apps Script URL</label>
+      <input type="text" id="gasUrl" placeholder="https://script.google.com/..." />
+    </div>
     <button onclick="guardarConfig()">Guardar y continuar</button>
   `;
+
+  // Si ya hay config guardada, mostrar campos rellenos
+  if (Config.groqKey) document.getElementById('groq').value = Config.groqKey;
+  if (Config.sheetsKey) document.getElementById('sheets').value = Config.sheetsKey;
+  if (Config.spreadsheetId) document.getElementById('spreadsheet').value = Config.spreadsheetId;
+  if (Config.gasUrl) document.getElementById('gasUrl').value = Config.gasUrl;
 }
 
 function guardarConfig() {
@@ -37,10 +74,8 @@ function guardarConfig() {
 // INICIO
 // ==================
 async function iniciarApp() {
-  document.getElementById('app').innerHTML = `
-    <h1>Notas de Voz</h1>
-    <p class="mensaje" id="estado-inicio">Cargando datos...</p>
-  `;
+  mostrarConfig();
+  document.getElementById('estado').textContent = 'Cargando clientes...';
 
   try {
     clientesCache = await Sheets.obtenerClientes();
@@ -49,46 +84,19 @@ async function iniciarApp() {
     } catch {
       notasCache = [];
     }
-    document.getElementById('estado-inicio').textContent =
-      `✅ ${clientesCache.length} clientes y ${notasCache.length} notas cargadas`;
-    setTimeout(mostrarGrabador, 800);
+    document.getElementById('estado').textContent = 
+      `✅ ${clientesCache.length} clientes cargados`;
+    setTimeout(() => {
+      document.getElementById('estado').textContent = 'Listo para grabar';
+    }, 2000);
   } catch (e) {
-    document.getElementById('estado-inicio').innerHTML = `
-      ❌ Error cargando datos: ${e.message}<br><br>
-      <button onclick="iniciarApp()">Reintentar</button>
-      <button onclick="Config.clear(); mostrarConfig()">⚙️ Reconfigurar</button>
-    `;
+    document.getElementById('estado').textContent = `❌ Error: ${e.message}`;
   }
-}
-
-// ==================
-// NAVEGACIÓN
-// ==================
-function navBar(activa) {
-  return `
-    <div class="navbar">
-      <button class="${activa === 'grabar' ? 'nav-activo' : ''}" onclick="mostrarGrabador()">🎙️ Grabar</button>
-      <button class="${activa === 'dashboard' ? 'nav-activo' : ''}" onclick="mostrarDashboard()">📋 Notas</button>
-      <button class="${activa === 'config' ? 'nav-activo' : ''}" onclick="Config.clear(); mostrarConfig()">⚙️</button>
-    </div>
-  `;
 }
 
 // ==================
 // GRABADOR
 // ==================
-function mostrarGrabador() {
-  document.getElementById('app').innerHTML = `
-    ${navBar('grabar')}
-    <h1>Notas de Voz</h1>
-    <canvas id="visualizador" width="440" height="80"></canvas>
-    <p class="mensaje" id="timer">00:00</p>
-    <button id="btnGrabar" onclick="toggleGrabacion()">🎙️ Grabar</button>
-    <p class="mensaje" id="estado"></p>
-    <div id="resultado"></div>
-  `;
-}
-
 async function toggleGrabacion() {
   const btn = document.getElementById('btnGrabar');
   const estado = document.getElementById('estado');
@@ -103,8 +111,8 @@ async function toggleGrabacion() {
     if (!ok) return;
 
     grabando = true;
-    btn.textContent = '⏹️ Detener';
-    btn.style.backgroundColor = '#c0392b';
+    btn.textContent = '⏹️';
+    btn.classList.add('recording');
     estado.textContent = 'Grabando...';
 
     const canvas = document.getElementById('visualizador');
@@ -112,8 +120,8 @@ async function toggleGrabacion() {
 
   } else {
     grabando = false;
-    btn.textContent = '🎙️ Grabar';
-    btn.style.backgroundColor = '';
+    btn.textContent = '🎙️';
+    btn.classList.remove('recording');
     btn.disabled = true;
     estado.textContent = 'Transcribiendo...';
 
@@ -141,15 +149,15 @@ async function toggleGrabacion() {
 // TRANSCRIPCIÓN
 // ==================
 function mostrarTranscripcion() {
+  document.getElementById('estado').textContent = '✅ Transcripción completada';
   document.getElementById('resultado').innerHTML = `
     <div class="resultado-box">
       <p class="resultado-label">Transcripción</p>
       <p class="resultado-texto">${transcripcionActual}</p>
     </div>
     <button onclick="analizarTranscripcion()">🧠 Analizar con IA</button>
-    <button onclick="mostrarFormularioManual()">✏️ Rellenar manualmente</button>
+    <button class="btn-secondary" onclick="mostrarFormularioManual()">✏️ Rellenar manualmente</button>
   `;
-  document.getElementById('estado').textContent = '✅ Transcripción completada';
 }
 
 // ==================
@@ -195,7 +203,7 @@ function mostrarFormularioConfirmacion(analisis, clienteMatch) {
     </option>`
   ).join('');
 
-  const urgenciaColores = ['', '#27ae60', '#2ecc71', '#f39c12', '#e67e22', '#e74c3c'];
+  const urgenciaLabels = ['', '⚪ Mínima', '🟢 Baja', '🟡 Media', '🟠 Alta', '🔴 Máxima'];
 
   document.getElementById('resultado').innerHTML = `
     <div class="resultado-box">
@@ -211,7 +219,7 @@ function mostrarFormularioConfirmacion(analisis, clienteMatch) {
       <textarea id="campoTareas" rows="3">${Array.isArray(analisis.tareas) ? analisis.tareas.join(' | ') : ''}</textarea>
     </div>
     <div class="resultado-box">
-      <p class="resultado-label">Urgencia: <span id="urgenciaValor" style="color:${urgenciaColores[analisis.urgencia]}; font-weight:bold;">${analisis.urgencia}/5</span></p>
+      <p class="resultado-label">Urgencia: <span id="urgenciaValor">${urgenciaLabels[analisis.urgencia]}</span></p>
       <input type="range" id="campoUrgencia" min="1" max="5" value="${analisis.urgencia}"
         oninput="actualizarUrgencia(this.value)" />
     </div>
@@ -222,16 +230,14 @@ function mostrarFormularioConfirmacion(analisis, clienteMatch) {
         ${opcionesClientes}
       </select>
     </div>
-    <button id="btnGuardar" onclick="guardarNota()">💾 Guardar en Sheets</button>
-    <button onclick="mostrarGrabador()">🎙️ Nueva nota</button>
+    <button id="btnGuardar" onclick="guardarNota()">💾 Guardar nota</button>
+    <button class="btn-secondary" onclick="limpiarGrabador()">🎙️ Nueva nota</button>
   `;
 }
 
 function actualizarUrgencia(valor) {
-  const colores = ['', '#27ae60', '#2ecc71', '#f39c12', '#e67e22', '#e74c3c'];
-  const span = document.getElementById('urgenciaValor');
-  span.textContent = `${valor}/5`;
-  span.style.color = colores[parseInt(valor)];
+  const labels = ['', '⚪ Mínima', '🟢 Baja', '🟡 Media', '🟠 Alta', '🔴 Máxima'];
+  document.getElementById('urgenciaValor').textContent = labels[parseInt(valor)];
 }
 
 // ==================
@@ -258,54 +264,47 @@ async function guardarNota() {
   try {
     await Sheets.guardarNota(nota);
     notasCache.push(nota);
-    document.getElementById('estado').textContent = '✅ Nota guardada correctamente';
+    document.getElementById('estado').textContent = '✅ Nota guardada';
     btn.textContent = '✅ Guardado';
-    setTimeout(mostrarGrabador, 1500);
+    setTimeout(limpiarGrabador, 1500);
   } catch (e) {
-    document.getElementById('estado').textContent = `❌ Error guardando: ${e.message}`;
+    document.getElementById('estado').textContent = `❌ Error: ${e.message}`;
     btn.disabled = false;
-    btn.textContent = '💾 Guardar en Sheets';
+    btn.textContent = '💾 Guardar nota';
   }
+}
+
+function limpiarGrabador() {
+  document.getElementById('resultado').innerHTML = '';
+  document.getElementById('estado').textContent = 'Listo para grabar';
+  document.getElementById('timer').textContent = '00:00';
+  transcripcionActual = '';
 }
 
 // ==================
 // DASHBOARD
 // ==================
-function mostrarDashboard() {
-  const clientes = [...new Set(notasCache.map(n => n.clienteConfirmado).filter(Boolean))];
-
-  document.getElementById('app').innerHTML = `
-    ${navBar('dashboard')}
-    <h1>Mis Notas</h1>
-    <div class="filtros">
-      <select id="filtroCliente" onchange="renderNotas()">
-        <option value="">Todos los clientes</option>
-        ${clientes.map(c => `<option value="${c}">${c}</option>`).join('')}
-      </select>
-      <select id="filtroUrgencia" onchange="renderNotas()">
-        <option value="">Toda urgencia</option>
-        <option value="5">⭐⭐⭐⭐⭐ Máxima</option>
-        <option value="4">⭐⭐⭐⭐ Alta</option>
-        <option value="3">⭐⭐⭐ Media</option>
-        <option value="2">⭐⭐ Baja</option>
-        <option value="1">⭐ Mínima</option>
-      </select>
-    </div>
-    <div id="listanotas"></div>
-  `;
-
-  renderNotas();
-}
-
 function renderNotas() {
-  const filtroCliente = document.getElementById('filtroCliente').value;
-  const filtroUrgencia = document.getElementById('filtroUrgencia').value;
-  const urgenciaColores = ['', '#27ae60', '#2ecc71', '#f39c12', '#e67e22', '#e74c3c'];
+  const filtroCliente = document.getElementById('filtroCliente')?.value || '';
+  const filtroUrgencia = document.getElementById('filtroUrgencia')?.value || '';
+
+  // Actualizar opciones de clientes en filtro
+  const selectCliente = document.getElementById('filtroCliente');
+  if (selectCliente && selectCliente.options.length <= 1) {
+    const clientes = [...new Set(notasCache.map(n => n.clienteConfirmado).filter(Boolean))];
+    clientes.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c;
+      opt.textContent = c;
+      selectCliente.appendChild(opt);
+    });
+  }
 
   let notas = [...notasCache].reverse();
-
   if (filtroCliente) notas = notas.filter(n => n.clienteConfirmado === filtroCliente);
   if (filtroUrgencia) notas = notas.filter(n => String(n.urgencia) === filtroUrgencia);
+
+  const urgencyLabels = ['', 'Mínima', 'Baja', 'Media', 'Alta', 'Máxima'];
 
   if (notas.length === 0) {
     document.getElementById('listanotas').innerHTML =
@@ -317,22 +316,11 @@ function renderNotas() {
     <div class="nota-card">
       <div class="nota-header">
         <span class="nota-cliente">${n.clienteConfirmado || 'Sin cliente'}</span>
-        <span class="nota-urgencia" style="color:${urgenciaColores[n.urgencia] || '#aaa'}">
-          ${'★'.repeat(n.urgencia)}${'☆'.repeat(5 - n.urgencia)}
-        </span>
+        <span class="urgency-tag urg-${n.urgencia}">${urgencyLabels[n.urgencia] || n.urgencia}</span>
       </div>
-      <p class="nota-fecha">${n.fecha} ${n.hora}</p>
+      <p class="nota-fecha">${n.fecha} · ${n.hora}</p>
       <p class="nota-resumen">${n.resumen}</p>
       ${n.tareas ? `<p class="nota-tareas">📌 ${n.tareas}</p>` : ''}
     </div>
   `).join('');
-}
-
-// ==================
-// PUNTO DE ENTRADA
-// ==================
-if (Config.isComplete()) {
-  iniciarApp();
-} else {
-  mostrarConfig();
 }

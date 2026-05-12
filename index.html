@@ -5,15 +5,63 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="theme-color" content="#1a1a2e" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="theme-color" content="#F2F2F7" />
   <title>Notas de Voz</title>
   <link rel="manifest" href="manifest.json" />
   <link rel="stylesheet" href="css/styles.css" />
 </head>
 <body>
-  <div id="app">Cargando...</div>
-  <div id="version">v7</div>
+  <div id="app">
+
+    <!-- Vista 1: Grabador -->
+    <main id="view-grabar" class="view active">
+      <h2>Nueva Nota</h2>
+      <div class="recorder-card">
+        <canvas id="visualizador" height="80"></canvas>
+        <p id="timer">00:00</p>
+        <button id="btnGrabar" class="btn-record" onclick="toggleGrabacion()">🎙️</button>
+        <p id="estado" class="status-text">Listo para grabar</p>
+      </div>
+      <div id="resultado"></div>
+    </main>
+
+    <!-- Vista 2: Dashboard -->
+    <main id="view-dashboard" class="view">
+      <h2>Notas Guardadas</h2>
+      <div class="filtros">
+        <select id="filtroCliente" onchange="renderNotas()">
+          <option value="">Todos los clientes</option>
+        </select>
+        <select id="filtroUrgencia" onchange="renderNotas()">
+          <option value="">Toda urgencia</option>
+          <option value="5">🔴 Máxima</option>
+          <option value="4">🟠 Alta</option>
+          <option value="3">🟡 Media</option>
+          <option value="2">🟢 Baja</option>
+          <option value="1">⚪ Mínima</option>
+        </select>
+      </div>
+      <div id="listanotas"></div>
+    </main>
+
+    <!-- Vista 3: Configuración -->
+    <main id="view-config" class="view">
+      <h2>Ajustes</h2>
+      <div id="config-content"></div>
+    </main>
+
+  </div>
+
+  <!-- Tab Bar -->
+  <nav id="tab-bar">
+    <button class="tab-btn active" data-view="grabar">🎙️<span>Grabar</span></button>
+    <button class="tab-btn" data-view="dashboard">📋<span>Notas</span></button>
+    <button class="tab-btn" data-view="config">⚙️<span>Ajustes</span></button>
+  </nav>
+
+  <div id="version">v8</div>
+
   <script src="js/config.js"></script>
   <script src="js/audio.js"></script>
   <script src="js/api-ia.js"></script>
